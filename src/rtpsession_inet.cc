@@ -17,8 +17,9 @@
   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 */
 
-
+#ifndef _GNU_SOURCE
 #define _GNU_SOURCE
+#endif
 
 #if defined(WIN32) || defined(_WIN32_WCE)
 #include "ortp-config-win32.h"
@@ -72,8 +73,184 @@ typedef INT  (WINAPI * LPFN_WSARECVMSG)(SOCKET, LPWSAMSG, LPDWORD, LPWSAOVERLAPP
 static LPFN_WSARECVMSG ortp_WSARecvMsg = NULL;
 #endif
 
+//XIA
+/*
+* Functions written by Haoliang Quan
+*/
+#include <string.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <time.h>
+#include "xia/dagaddr.hpp"
+
+//@return char * like "SID:0000000000000000000000000000000000000000"
+char *port2sid(int port)
+{
+	if (port <=0 || port > 65535)
+	{
+		printf("Port number error.\n");
+		exit(-1);
+	}
+	char *c_port = (char *)malloc(50);
+	sprintf(c_port, "SID:%040x", port);
+
+	return c_port;
+}
+
+int hex2dec(char c)
+{
+	if (c >= '0' && c <= '9')
+		return c - '0';
+	if (c >= 'a' && c <= 'f')
+		return c - 'a' + 10;
+	if (c >= 'A' && c <= 'F')
+		return c - 'A' + 10;
+
+	printf("Not valid number 0-f.\n");
+	exit(-1);
+	return 0;
+}
+/**
+ * Convert an SID to a port number < 65536
+ *
+ * @param  sid An SID like "SID:0000000000000000000000000000000000000000"
+ * @return int port number
+ */
+int sid2port(char *sid)
+{
+	if (sid[0] != 'S'
+		|| sid[1] != 'I'
+		|| sid[2] != 'D'
+		|| sid[3] != ':'
+		|| strlen(sid) != 44)
+	{
+		printf("SID format error.\n");
+		exit(-1);
+	}
+
+	int port = 0;
+	char c_port[6];
+
+	strcpy(c_port, sid + 39);
+
+	int i;
+	for (i = 0; i < 5; ++i)
+	{
+		port *= 16;
+		port += hex2dec(c_port[i]);
+	}
+
+	srand(time(NULL));
+	while (port >= 65536)
+	{
+		port /= 2;
+		port += rand() % 65535;
+	}
+
+	return port;
+}
+
+/**
+ * Create a DAG using addr and port number
+ *
+ * @param  addr An addr like "AD:0000000000000000000000000000000000000000 HID:0000000000000000000000000000000000000000"
+ * @param  port An port number like 1024
+ * @return A DAG in DAG Format
+ */
+char *createDAG(const char *addr, int port)
+{
+
+	if (addr[0] != 'A'
+		|| addr[1] != 'D'
+		|| addr[2] != ':'
+		|| addr[44] != 'H'
+		|| addr[45] != 'I'
+		|| addr[46] != 'D'
+		|| addr[47] != ':'
+		|| strlen(addr) != 88)
+	{
+		printf("Error in createDAG\n");
+		exit(-1);
+	}
+
+	char *AD = (char *)malloc(50);
+	char *HID = (char *)malloc(50);
+	memset(AD, 0, 50);
+	memset(HID, 0, 50);
+
+	strncpy(AD, addr, 43);
+	strncpy(HID, addr + 44, 44);
+
+	char *c_dag = (char *)malloc(160);
+	memset(c_dag, 0, 160);
+
+	char *SID = port2sid(port);
+
+	Node n_src;
+	Node n_ad(Node::XID_TYPE_AD, AD + 3);
+	Node n_hid(Node::XID_TYPE_HID, HID + 4);
+	Node n_sid(Node::XID_TYPE_SID, SID + 4);
+
+	Graph g0 = n_src * n_sid;
+	Graph g1 = n_src * n_ad * n_sid;
+	Graph g2 = n_src * n_ad * n_hid * n_sid;
+
+	Graph g = g0 + g1 + g2;
+
+	strcpy(c_dag, g.dag_string().c_str());
+
+	free(SID);
+	free(AD);
+	free(HID);
+
+	return c_dag;
+}
+
+/**
+ * Get AD and HID in a sockaddr_x
+ *
+ * @param  saddr A sockaddr_x struct
+ * @return An address like "AD:0000000000000000000000000000000000000000 HID:0000000000000000000000000000000000000000"
+ */
+char *getAddr(sockaddr_x *saddr)
+{
+	Graph g(saddr);
+	const char *c_dag = g.dag_string().c_str();
+
+	char *addr = (char *)malloc(100);
+	memset(addr, 0, 100);
+	
+	unsigned int i;
+	//to mark the first ":" following "AD"
+	int j = -1;
+	//to mark the second ":" following "HID"
+	int k = -1;
+	for (i = 0; i < strlen(c_dag); ++i)
+	{
+		if (c_dag[i] == ':')
+		{
+			if (j == -1)
+			{
+				j = i;
+				continue;
+			}
+			k = i;
+			break;
+		}
+	}
+
+	strncat(addr, c_dag + j - 2, 43);
+	strcat(addr, " ");
+	strncat(addr, c_dag + k - 3, 44);
+
+	return addr;
+}
+/*
+* End
+*/
+
 static bool_t try_connect(int fd, const struct sockaddr *dest, socklen_t addrlen){
-	if (connect(fd,dest,addrlen)<0){
+	if (Xconnect(fd,dest,addrlen)<0){
 		ortp_warning("Could not connect() socket: %s",getSocketError());
 		return FALSE;
 	}
@@ -82,14 +259,13 @@ static bool_t try_connect(int fd, const struct sockaddr *dest, socklen_t addrlen
 
 static ortp_socket_t create_and_bind(const char *addr, int port, int *sock_family, bool_t reuse_addr){
 	int err;
-	int optval = 1;
 	ortp_socket_t sock=-1;
 
 #ifdef ORTP_INET6
 	char num[8];
 	struct addrinfo hints, *res0, *res;
 #else
-	struct sockaddr_in saddr;
+	sockaddr_x saddr;
 #endif
 	
 #ifdef ORTP_INET6
@@ -174,37 +350,22 @@ static ortp_socket_t create_and_bind(const char *addr, int port, int *sock_famil
 	}
 	freeaddrinfo(res0);
 #else
-	saddr.sin_family = AF_INET;
-	*sock_family=AF_INET;
-	err = inet_aton (addr, &saddr.sin_addr);
-	if (err < 0)
-	{
-		ortp_warning ("Error in socket address:%s.", getSocketError());
+	//XIA
+	//totally rewritten
+	*sock_family=AF_XIA;
+
+	sock = Xsocket(AF_XIA, SOCK_DGRAM, 0);
+	if (sock == -1) {
 		return -1;
 	}
-	saddr.sin_port = htons (port);
 
-	sock = socket (PF_INET, SOCK_DGRAM, 0);
-	if (sock==-1) return -1;
+	const char *c_dag = createDAG(addr, port);
+	Graph g(c_dag);
 
-	if (reuse_addr){
-		err = setsockopt (sock, SOL_SOCKET, SO_REUSEADDR,
-				(SOCKET_OPTION_VALUE)&optval, sizeof (optval));
-		if (err < 0)
-		{
-			ortp_warning ("Fail to set rtp address reusable: %s.",getSocketError());
-		}
-	}
-#if defined(ORTP_TIMESTAMP)
-	err = setsockopt (sock, SOL_SOCKET, SO_TIMESTAMP,
-			(SOCKET_OPTION_VALUE)&optval, sizeof (optval));
-	if (err < 0)
-	{
-		ortp_warning ("Fail to set rtp timestamp: %s.",getSocketError());
-	}
-#endif
+	memset(&saddr, 0, sizeof(saddr));
+	g.fill_sockaddr(&saddr);
 
-	err = bind (sock,
+	err = Xbind (sock,
 		    (struct sockaddr *) &saddr,
 		    sizeof (saddr));
 
@@ -226,12 +387,16 @@ static ortp_socket_t create_and_bind(const char *addr, int port, int *sock_famil
 	}
 #endif
 	if (sock!=-1){
+		//seems something TODO here
 		set_non_blocking_socket (sock);
 	}
 	return sock;
 }
 
 static void set_socket_sizes(int sock, unsigned int sndbufsz, unsigned int rcvbufsz){
+
+	return;
+
 	int err;
 	bool_t done=FALSE;
 	if (sndbufsz>0){
@@ -307,6 +472,33 @@ static ortp_socket_t create_and_bind_random(const char *localip, int *sock_famil
 int
 rtp_session_set_local_addr (RtpSession * session, const char * addr, int rtp_port, int rtcp_port)
 {
+	char *addr_ = (char *)malloc(200);
+	strcpy(addr_, addr);
+	if (strcmp(addr, "0.0.0.0") == 0)
+	{
+		char localhostAD[100];
+		char localhostHID[100];
+		char localhost4ID[100];
+
+		memset(localhostAD, 0, 100);
+		memset(localhostHID, 0, 100);
+		memset(localhost4ID, 0, 100);
+
+		int sock_t = Xsocket(AF_XIA, SOCK_DGRAM, 0);
+		int err = XreadLocalHostAddr(sock_t, localhostAD, 100, localhostHID, 100, localhost4ID, 100);
+		if (err < 0)
+		{		
+			return -1;
+		}
+
+		memset(addr_, 0, 200);
+
+		strcat(addr_, localhostAD);
+		strcat(addr_, " ");
+		strcat(addr_, localhostHID);
+
+	}
+
 	ortp_socket_t sock;
 	int sockfamily;
 	if (session->rtp.socket!=(ortp_socket_t)-1){
@@ -315,9 +507,9 @@ rtp_session_set_local_addr (RtpSession * session, const char * addr, int rtp_por
 	}
 	/* try to bind the rtp port */
 	if (rtp_port>0)
-		sock=create_and_bind(addr,rtp_port,&sockfamily,session->reuseaddr);
+		sock=create_and_bind(addr_,rtp_port,&sockfamily,session->reuseaddr);
 	else
-		sock=create_and_bind_random(addr,&sockfamily,&rtp_port);
+		sock=create_and_bind_random(addr_,&sockfamily,&rtp_port);
 	if (sock!=-1){
 		set_socket_sizes(sock,session->rtp.snd_socket_size,session->rtp.rcv_socket_size);
 		session->rtp.sockfamily=sockfamily;
@@ -326,12 +518,12 @@ rtp_session_set_local_addr (RtpSession * session, const char * addr, int rtp_por
 		/*try to bind rtcp port */
 		if (rtcp_port<0) {
 			rtcp_port=rtp_port+1;
-			sock=create_and_bind(addr,rtcp_port,&sockfamily,session->reuseaddr);
+			sock=create_and_bind(addr_,rtcp_port,&sockfamily,session->reuseaddr);
 			if (sock==(ortp_socket_t)-1) {
-				sock=create_and_bind_random(addr,&sockfamily,&rtcp_port);
+				sock=create_and_bind_random(addr_,&sockfamily,&rtcp_port);
 			}
 		} else {
-			sock=create_and_bind(addr,rtcp_port,&sockfamily,session->reuseaddr);
+			sock=create_and_bind(addr_,rtcp_port,&sockfamily,session->reuseaddr);
 		}
 		if (sock!=(ortp_socket_t)-1){
 			session->rtcp.sockfamily=sockfamily;
@@ -348,7 +540,7 @@ rtp_session_set_local_addr (RtpSession * session, const char * addr, int rtp_por
 
 		return 0;
 	}
-	ortp_debug("Could not bind RTP socket on port to %s port %i",addr,rtp_port);
+	ortp_debug("Could not bind RTP socket on port to %s port %i",addr_,rtp_port);
 	return -1;
 }
 
@@ -365,6 +557,9 @@ rtp_session_set_local_addr (RtpSession * session, const char * addr, int rtp_por
 **/
 int rtp_session_set_pktinfo(RtpSession *session, int activate)
 {
+
+	return 0;
+
 	int retval;
 	int optname;
 #if defined(WIN32) || defined(_WIN32_WCE)
@@ -427,6 +622,9 @@ int rtp_session_set_pktinfo(RtpSession *session, int activate)
 **/
 int rtp_session_set_multicast_ttl(RtpSession *session, int ttl)
 {
+
+	return 0;
+
     int retval;
     
     // Store new TTL if one is specified
@@ -497,6 +695,9 @@ int rtp_session_get_multicast_ttl(RtpSession *session)
 **/
 int rtp_session_set_multicast_loopback(RtpSession *session, int yesno)
 {
+
+	return 0;
+
     int retval;
     
     // Store new loopback state if one is specified
@@ -571,6 +772,9 @@ int rtp_session_get_multicast_loopback(RtpSession *session)
  *
 **/
 int rtp_session_set_dscp(RtpSession *session, int dscp){
+
+	return 0;
+
 	int retval=0;
 	int tos;
 	int proto;
@@ -717,9 +921,9 @@ static char * ortp_inet_ntoa(struct sockaddr *addr, int addrlen, char *dest, int
 		ortp_warning("getnameinfo error: %s",gai_strerror(err));
 	}
 #else
-	char *tmp=inet_ntoa(((struct sockaddr_in*)addr)->sin_addr);
-	strncpy(dest,tmp,destlen);
-	dest[destlen-1]='\0';
+	char *tmp = getAddr((sockaddr_x *)addr);
+	strncpy(dest, tmp, destlen);
+	dest[destlen - 1] = '\0';
 #endif
 	return dest;
 }
@@ -782,7 +986,32 @@ rtp_session_set_remote_addr_full (RtpSession * session, const char * rtp_addr, i
 			err = rtp_session_set_local_addr (session, "::", -1, -1);
 		else err=rtp_session_set_local_addr (session, "0.0.0.0", -1, -1);
 #else
-		err = rtp_session_set_local_addr (session, "0.0.0.0", -1, -1);
+		//XIA
+		//in order to support address like "0.0.0.0" in IPv4
+		//read local address and use this local address
+		char localhostAD[100];
+		char localhostHID[100];
+		char localhost4ID[100];
+
+		memset(localhostAD, 0, 100);
+		memset(localhostHID, 0, 100);
+		memset(localhost4ID, 0, 100);
+
+		int sock = Xsocket(AF_XIA, SOCK_DGRAM, 0);
+		err = XreadLocalHostAddr(sock, localhostAD, 100, localhostHID, 100, localhost4ID, 100);
+		if (err < 0)
+		{		
+			return -1;
+		}
+
+		char *addr = (char *)malloc(200);
+		memset(addr, 0, 200);
+
+		strcat(addr, localhostAD);
+		strcat(addr, " ");
+		strcat(addr, localhostHID);
+
+		err = rtp_session_set_local_addr (session, addr, -1, -1);
 #endif
 		if (err<0) return -1;
 	}
@@ -830,24 +1059,24 @@ rtp_session_set_remote_addr_full (RtpSession * session, const char * rtp_addr, i
 	}
 #else
 	session->rtp.rem_addrlen=sizeof(session->rtp.rem_addr);
-	session->rtp.rem_addr.sin_family = AF_INET;
-	err = inet_aton (rtp_addr, &session->rtp.rem_addr.sin_addr);
-	if (err < 0)
-	{
-		ortp_warning ("Error in socket address:%s.", getSocketError());
-		return err;
-	}
-	session->rtp.rem_addr.sin_port = htons (rtp_port);
+
+	sockaddr_x saddr;
+	memset(&saddr, 0, sizeof(saddr));
+
+	Graph g0(createDAG(rtp_addr, rtp_port));
+	g0.fill_sockaddr(&saddr);
+
+	session->rtp.rem_addr = saddr;
+
 
 	session->rtcp.rem_addrlen=sizeof(session->rtcp.rem_addr);
-	session->rtcp.rem_addr.sin_family = AF_INET;
-	err = inet_aton (rtcp_addr, &session->rtcp.rem_addr.sin_addr);
-	if (err < 0)
-	{
-		ortp_warning ("Error in socket address:%s.", getSocketError());
-		return err;
-	}
-	session->rtcp.rem_addr.sin_port = htons (rtcp_port);
+
+	memset(&saddr, 0, sizeof(saddr));
+
+	Graph g1(createDAG(rtcp_addr, rtcp_port));
+	g1.fill_sockaddr(&saddr);
+
+	session->rtcp.rem_addr = saddr;
 #endif
 	if (can_connect(session)){
 		if (try_connect(session->rtp.socket,(struct sockaddr*)&session->rtp.rem_addr,session->rtp.rem_addrlen))
@@ -920,7 +1149,7 @@ void rtp_session_flush_sockets(RtpSession *session){
 #ifdef ORTP_INET6
 	struct sockaddr_storage from;
 #else
-	struct sockaddr from;
+	sockaddr_x from;
 #endif
 	socklen_t fromlen=sizeof(from);
 	if (rtp_session_using_transport(session, rtp))
@@ -936,10 +1165,10 @@ void rtp_session_flush_sockets(RtpSession *session){
 	  }
 
 	if (session->rtp.socket!=(ortp_socket_t)-1){
-		while (recvfrom(session->rtp.socket,(char*)trash,sizeof(trash),0,(struct sockaddr *)&from,&fromlen)>0){};
+		while (Xrecvfrom(session->rtp.socket,(char*)trash,sizeof(trash),0,(struct sockaddr *)&from,&fromlen)>0){};
 	}
 	if (session->rtcp.socket!=(ortp_socket_t)-1){
-		while (recvfrom(session->rtcp.socket,(char*)trash,sizeof(trash),0,(struct sockaddr*)&from,&fromlen)>0){};
+		while (Xrecvfrom(session->rtcp.socket,(char*)trash,sizeof(trash),0,(struct sockaddr*)&from,&fromlen)>0){};
 	}
 }
 
@@ -1032,7 +1261,7 @@ rtp_session_rtp_send (RtpSession * session, mblk_t * m)
 #else
 		if (m->b_cont!=NULL)
 			msgpullup(m,-1);
-		error = sendto (sockfd, (char*)m->b_rptr, (int) (m->b_wptr - m->b_rptr),
+		error = Xsendto (sockfd, (char*)m->b_rptr, (int) (m->b_wptr - m->b_rptr),
 			 0,destaddr,destlen);
 #endif
 	}
@@ -1076,7 +1305,7 @@ rtp_session_rtcp_send (RtpSession * session, mblk_t * m)
 			if (m->b_cont!=NULL){
 				msgpullup(m,-1);
 			}
-			error = sendto (sockfd, (char*)m->b_rptr,
+			error = Xsendto (sockfd, (char*)m->b_rptr,
 			(int) (m->b_wptr - m->b_rptr), 0,
 			destaddr, destlen);
 #endif
@@ -1092,6 +1321,49 @@ rtp_session_rtcp_send (RtpSession * session, mblk_t * m)
 	return error;
 }
 
+//XIA
+//added by Haoliang Quan
+ssize_t fake_Xrecvmsg(int sd, struct msghdr *msg, int flags)
+{
+	ssize_t bytes_read;
+	size_t expected_recv_size;
+	ssize_t left2move;
+	char *tmp_buf;
+	char *tmp;
+	int i;
+
+	expected_recv_size = 0;
+	for(i = 0; i < msg->msg_iovlen; i++)
+		expected_recv_size += msg->msg_iov[i].iov_len;
+	tmp_buf = (char *)malloc(expected_recv_size);
+	if(!tmp_buf)
+		return -1;
+
+	left2move = bytes_read = Xrecvfrom(sd,
+								tmp_buf,
+								expected_recv_size,
+								flags,
+								(sockaddr *)msg->msg_name,
+								&msg->msg_namelen
+								);
+
+	for(tmp = tmp_buf, i = 0; i < msg->msg_iovlen; i++)
+	{
+		if(left2move <= 0) break;
+		memcpy(msg->msg_iov[i].iov_base,
+				tmp,
+				MIN(msg->msg_iov[i].iov_len,left2move)
+				);
+		left2move -= msg->msg_iov[i].iov_len;
+		tmp += msg->msg_iov[i].iov_len;
+	}
+
+	free(tmp_buf);
+
+	return bytes_read;
+}
+
+//TODO: wait for Xrecvmsg API
 int rtp_session_rtp_recv_abstract(ortp_socket_t socket, mblk_t *msg, int flags, struct sockaddr *from, socklen_t *fromlen) {
 	int ret;
 	int bufsz = (int) (msg->b_datap->db_lim - msg->b_datap->db_base);
@@ -1116,9 +1388,11 @@ int rtp_session_rtp_recv_abstract(ortp_socket_t socket, mblk_t *msg, int flags, 
 	msghdr.msg_control = &control;
 	msghdr.msg_controllen = sizeof(control);
 
-	ret = recvmsg(socket, &msghdr, flags);
+	ret = fake_Xrecvmsg(socket, &msghdr, flags);
 	if(fromlen != NULL)
 		*fromlen = msghdr.msg_namelen;
+#endif
+	/*
 	if(ret >= 0) {
 #else
 	char control[512];
@@ -1186,6 +1460,7 @@ int rtp_session_rtp_recv_abstract(ortp_socket_t socket, mblk_t *msg, int flags, 
 #endif
 		}
 	}
+	*/
 	return ret;
 }
 
@@ -1196,7 +1471,7 @@ int rtp_session_rtp_recv (RtpSession * session, uint32_t user_ts)
 #ifdef ORTP_INET6
 	struct sockaddr_storage remaddr;
 #else
-	struct sockaddr remaddr;
+	sockaddr_x remaddr;
 #endif
 	socklen_t addrlen = sizeof (remaddr);
 	mblk_t *mp;
@@ -1397,7 +1672,7 @@ rtp_session_rtcp_recv (RtpSession * session)
 #ifdef ORTP_INET6
 	struct sockaddr_storage remaddr;
 #else
-	struct sockaddr remaddr;
+	sockaddr_x remaddr;
 #endif
 	socklen_t addrlen=0;
 	mblk_t *mp;

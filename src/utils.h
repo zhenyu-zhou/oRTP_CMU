@@ -77,8 +77,15 @@ typedef union{
 #define is_would_block_error(errnum)	(errnum==EWOULDBLOCK || errnum==EAGAIN)
 #endif
 
+#ifdef __cplusplus
+extern "C"
+{
+#endif
 void ortp_ev_queue_put(OrtpEvQueue *q, OrtpEvent *ev);
 
 uint64_t ortp_timeval_to_ntp(const struct timeval *tv);
+#ifdef __cplusplus
+}
+#endif
 
 #endif

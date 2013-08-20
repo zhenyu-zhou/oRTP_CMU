@@ -290,7 +290,7 @@ rtp_session_init (RtpSession * session, int mode)
 	session->recv_buf_size = UDP_MAX_SIZE;
 	session->symmetric_rtp = FALSE;
 	session->permissive=FALSE;
-	session->reuseaddr=TRUE;
+	session->reuseaddr=FALSE;
 	msgb_allocator_init(&session->allocator);
 }
 
@@ -1635,7 +1635,7 @@ rtp_session_set_symmetric_rtp (RtpSession * session, bool_t yesno)
  *
 **/
 void rtp_session_set_connected_mode(RtpSession *session, bool_t yesno){
-	session->use_connect=yesno;
+	session->use_connect=FALSE;
 }
 
 static float compute_bw(struct timeval *orig, unsigned int bytes){

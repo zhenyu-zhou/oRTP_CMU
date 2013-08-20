@@ -19,7 +19,7 @@ libortp_la_SOURCES=	str_utils.c 	\
 			logging.c \
 			rtpparse.c  \
 			rtpsession.c \
-			rtpsession_inet.c \
+			rtpsession_inet.cc \
 			rtpsession_priv.h \
 			jitterctl.c jitterctl.h \
 			rtpsignaltable.c  \

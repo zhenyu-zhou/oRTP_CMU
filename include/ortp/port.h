@@ -44,6 +44,7 @@
 
 #include <sys/types.h>
 #include <sys/socket.h>
+#include "xia/Xsocket.h"
 #include <netinet/in.h>
 #if defined(_XOPEN_SOURCE_EXTENDED) || !defined(__hpux)
 #include <arpa/inet.h>

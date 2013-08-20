@@ -32,7 +32,7 @@ LOCAL_SRC_FILES := \
 	src/logging.c \
 	src/rtpparse.c \
 	src/rtpsession.c \
-	src/rtpsession_inet.c \
+	src/rtpsession_inet.cc \
 	src/jitterctl.c \
 	src/rtpsignaltable.c  \
 	src/rtptimer.c \

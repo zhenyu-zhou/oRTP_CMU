@@ -123,7 +123,7 @@ int set_non_blocking_socket (ortp_socket_t sock)
  */
 int close_socket(ortp_socket_t sock){
 #if	!defined(_WIN32) && !defined(_WIN32_WCE)
-	return close (sock);
+	return Xclose (sock);
 #else
 	return closesocket(sock);
 #endif
@@ -401,6 +401,7 @@ char * WSAAPI gai_strerror(int errnum){
 #ifndef WIN32
 
 #include <sys/socket.h>
+#include "xia/Xsocket.h"
 #include <netdb.h>
 #include <sys/un.h>
 #include <sys/stat.h>

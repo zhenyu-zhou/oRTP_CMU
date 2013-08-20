@@ -128,7 +128,7 @@ typedef struct _RtpStream
 #ifdef ORTP_INET6
 	struct sockaddr_storage rem_addr;
 #else
-	struct sockaddr_in rem_addr;
+	sockaddr_x rem_addr;
 #endif
 	int rem_addrlen;
 	void *QoSHandle;
@@ -175,7 +175,7 @@ typedef struct _RtcpStream
 #ifdef ORTP_INET6
 	struct sockaddr_storage rem_addr;
 #else
-	struct sockaddr_in rem_addr;
+	sockaddr_x rem_addr;
 #endif
 	int rem_addrlen;
 	int interval;

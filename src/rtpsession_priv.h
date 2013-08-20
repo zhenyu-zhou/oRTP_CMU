@@ -41,6 +41,10 @@ typedef enum {
 
 #define rtp_session_using_transport(s, stream) (((s)->flags & RTP_SESSION_USING_TRANSPORT) && (s->stream.tr != 0))
 
+#ifdef __cplusplus
+extern "C"
+{
+#endif
 int rtp_session_rtp_recv_abstract(ortp_socket_t socket, mblk_t *msg, int flags, struct sockaddr *from, socklen_t *fromlen);
 
 void rtp_session_update_payload_type(RtpSession * session, int pt);
@@ -56,5 +60,7 @@ void rtp_session_rtcp_parse(RtpSession *session, mblk_t *mp);
 
 mblk_t * rtp_session_network_simulate(RtpSession *session, mblk_t *input);
 void ortp_network_simulator_destroy(OrtpNetworkSimulatorCtx *sim);
-
+#ifdef __cplusplus
+}
+#endif
 #endif
