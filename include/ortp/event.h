@@ -35,7 +35,7 @@ typedef struct RtpEndpoint{
 #ifdef ORTP_INET6
 	struct sockaddr_storage addr;
 #else
-	struct sockaddr addr;
+	struct sockaddr_x addr;
 #endif
 	socklen_t addrlen;
 }RtpEndpoint;
