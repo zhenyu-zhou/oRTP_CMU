@@ -499,6 +499,9 @@ rtp_session_set_local_addr (RtpSession * session, const char * addr, int rtp_por
 
 	}
 
+	if (addr[0] != 'a' && addr[0] != 'A')
+		ortp_error ("Not an XIA valid address!");
+
 	ortp_socket_t sock;
 	int sockfamily;
 	if (session->rtp.socket!=(ortp_socket_t)-1){
@@ -942,6 +945,8 @@ static char * ortp_inet_ntoa(struct sockaddr *addr, int addrlen, char *dest, int
 **/
 int
 rtp_session_set_remote_addr (RtpSession * session, const char * addr, int port){
+	if (addr[0] != 'a' && addr[0] != 'A')
+		ortp_error ("Not an XIA valid address!");
 	return rtp_session_set_remote_addr_full (session, addr, port, addr, port+1);
 }
 
