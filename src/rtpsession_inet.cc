@@ -245,6 +245,33 @@ char *getAddr(sockaddr_x *saddr)
 
 	return addr;
 }
+
+char *local_addr()
+{
+	char *local = (char *)malloc(200);
+	char localhostAD[100];
+	char localhostHID[100];
+	char localhost4ID[100];
+
+	memset(localhostAD, 0, 100);
+	memset(localhostHID, 0, 100);
+	memset(localhost4ID, 0, 100);
+
+	int sock = Xsocket(AF_XIA, SOCK_DGRAM, 0);
+	int err = XreadLocalHostAddr(sock, localhostAD, 100, localhostHID, 100, localhost4ID, 100);
+	if (err < 0)
+	{		
+		exit(-1);
+	}
+
+	memset(local, 0, 200);
+
+	strcat(local, localhostAD);
+	strcat(local, " ");
+	strcat(local, localhostHID);
+
+	return local;
+}
 /*
 * End
 */
@@ -476,27 +503,7 @@ rtp_session_set_local_addr (RtpSession * session, const char * addr, int rtp_por
 	strcpy(addr_, addr);
 	if (strcmp(addr, "0.0.0.0") == 0)
 	{
-		char localhostAD[100];
-		char localhostHID[100];
-		char localhost4ID[100];
-
-		memset(localhostAD, 0, 100);
-		memset(localhostHID, 0, 100);
-		memset(localhost4ID, 0, 100);
-
-		int sock_t = Xsocket(AF_XIA, SOCK_DGRAM, 0);
-		int err = XreadLocalHostAddr(sock_t, localhostAD, 100, localhostHID, 100, localhost4ID, 100);
-		if (err < 0)
-		{		
-			return -1;
-		}
-
-		memset(addr_, 0, 200);
-
-		strcat(addr_, localhostAD);
-		strcat(addr_, " ");
-		strcat(addr_, localhostHID);
-
+		strcpy(addr_, local_addr());
 	}
 
 	if (addr_[0] != 'a' && addr_[0] != 'A')
@@ -976,26 +983,7 @@ rtp_session_set_remote_addr_full (RtpSession * session, const char * rtp_addr, i
 	{
 		if (strcmp(rtp_addr, "127.0.0.1") == 0)
 		{
-			char localhostAD[100];
-			char localhostHID[100];
-			char localhost4ID[100];
-
-			memset(localhostAD, 0, 100);
-			memset(localhostHID, 0, 100);
-			memset(localhost4ID, 0, 100);
-
-			int sock = Xsocket(AF_XIA, SOCK_DGRAM, 0);
-			int err = XreadLocalHostAddr(sock, localhostAD, 100, localhostHID, 100, localhost4ID, 100);
-			if (err < 0)
-			{		
-				return -1;
-			}
-
-			memset(rtp_addr_, 0, 200);
-
-			strcat(rtp_addr_, localhostAD);
-			strcat(rtp_addr_, " ");
-			strcat(rtp_addr_, localhostHID);
+			strcpy(rtp_addr_, local_addr());
 		}
 		if (rtp_addr_[0] != 'a' && rtp_addr_[0] != 'A')
 			ortp_error ("Not a valid XIA address!");
@@ -1004,26 +992,7 @@ rtp_session_set_remote_addr_full (RtpSession * session, const char * rtp_addr, i
 	{
 		if (strcmp(rtp_addr, "127.0.0.1") == 0)
 		{
-			char localhostAD[100];
-			char localhostHID[100];
-			char localhost4ID[100];
-
-			memset(localhostAD, 0, 100);
-			memset(localhostHID, 0, 100);
-			memset(localhost4ID, 0, 100);
-
-			int sock = Xsocket(AF_XIA, SOCK_DGRAM, 0);
-			int err = XreadLocalHostAddr(sock, localhostAD, 100, localhostHID, 100, localhost4ID, 100);
-			if (err < 0)
-			{		
-				return -1;
-			}
-
-			memset(rtcp_addr_, 0, 200);
-
-			strcat(rtcp_addr_, localhostAD);
-			strcat(rtcp_addr_, " ");
-			strcat(rtcp_addr_, localhostHID);
+			strcpy(rtcp_addr_, local_addr());
 		}
 		if (rtcp_addr_[0] != 'a' && rtcp_addr_[0] != 'A')
 			ortp_error ("Not a valid XIA address!");
@@ -1056,27 +1025,8 @@ rtp_session_set_remote_addr_full (RtpSession * session, const char * rtp_addr, i
 		//XIA
 		//in order to support address like "0.0.0.0" in IPv4
 		//read local address and use this local address
-		char localhostAD[100];
-		char localhostHID[100];
-		char localhost4ID[100];
-
-		memset(localhostAD, 0, 100);
-		memset(localhostHID, 0, 100);
-		memset(localhost4ID, 0, 100);
-
-		int sock = Xsocket(AF_XIA, SOCK_DGRAM, 0);
-		err = XreadLocalHostAddr(sock, localhostAD, 100, localhostHID, 100, localhost4ID, 100);
-		if (err < 0)
-		{		
-			return -1;
-		}
-
 		char *addr = (char *)malloc(200);
-		memset(addr, 0, 200);
-
-		strcat(addr, localhostAD);
-		strcat(addr, " ");
-		strcat(addr, localhostHID);
+		strcpy(addr, local_addr());
 
 		err = rtp_session_set_local_addr (session, addr, -1, -1);
 #endif
