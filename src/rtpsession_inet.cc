@@ -499,7 +499,7 @@ rtp_session_set_local_addr (RtpSession * session, const char * addr, int rtp_por
 
 	}
 
-	if (addr[0] != 'a' && addr[0] != 'A')
+	if (addr_[0] != 'a' && addr_[0] != 'A')
 		ortp_error ("Not a valid XIA address!");
 
 	ortp_socket_t sock;
@@ -968,16 +968,67 @@ rtp_session_set_remote_addr (RtpSession * session, const char * addr, int port){
 int
 rtp_session_set_remote_addr_full (RtpSession * session, const char * rtp_addr, int rtp_port, const char * rtcp_addr, int rtcp_port)
 {
+	char *rtp_addr_ = (char *)malloc(200);
+	char *rtcp_addr_ = (char *)malloc(200);
+	strcpy(rtp_addr_, rtp_addr);
+	strcpy(rtcp_addr_, rtcp_addr);
 	if (rtp_addr != NULL)
 	{
-		if (rtp_addr[0] != 'a' && rtp_addr[0] != 'A')
+		if (strcmp(rtp_addr, "127.0.0.1") == 0)
+		{
+			char localhostAD[100];
+			char localhostHID[100];
+			char localhost4ID[100];
+
+			memset(localhostAD, 0, 100);
+			memset(localhostHID, 0, 100);
+			memset(localhost4ID, 0, 100);
+
+			int sock = Xsocket(AF_XIA, SOCK_DGRAM, 0);
+			int err = XreadLocalHostAddr(sock, localhostAD, 100, localhostHID, 100, localhost4ID, 100);
+			if (err < 0)
+			{		
+				return -1;
+			}
+
+			memset(rtp_addr_, 0, 200);
+
+			strcat(rtp_addr_, localhostAD);
+			strcat(rtp_addr_, " ");
+			strcat(rtp_addr_, localhostHID);
+		}
+		if (rtp_addr_[0] != 'a' && rtp_addr_[0] != 'A')
 			ortp_error ("Not a valid XIA address!");
 	}
 	if (rtcp_addr != NULL)
 	{
-		if (rtcp_addr[0] != 'a' && rtcp_addr[0] != 'A')
+		if (strcmp(rtp_addr, "127.0.0.1") == 0)
+		{
+			char localhostAD[100];
+			char localhostHID[100];
+			char localhost4ID[100];
+
+			memset(localhostAD, 0, 100);
+			memset(localhostHID, 0, 100);
+			memset(localhost4ID, 0, 100);
+
+			int sock = Xsocket(AF_XIA, SOCK_DGRAM, 0);
+			int err = XreadLocalHostAddr(sock, localhostAD, 100, localhostHID, 100, localhost4ID, 100);
+			if (err < 0)
+			{		
+				return -1;
+			}
+
+			memset(rtcp_addr_, 0, 200);
+
+			strcat(rtcp_addr_, localhostAD);
+			strcat(rtcp_addr_, " ");
+			strcat(rtcp_addr_, localhostHID);
+		}
+		if (rtcp_addr_[0] != 'a' && rtcp_addr_[0] != 'A')
 			ortp_error ("Not a valid XIA address!");
 	}
+
 	
 	int err;
 #ifdef ORTP_INET6
@@ -987,7 +1038,7 @@ rtp_session_set_remote_addr_full (RtpSession * session, const char * rtp_addr, i
 	hints.ai_family = PF_UNSPEC;
 	hints.ai_socktype = SOCK_DGRAM;
 	snprintf(num, sizeof(num), "%d", rtp_port);
-	err = getaddrinfo(rtp_addr, num, &hints, &res0);
+	err = getaddrinfo(rtp_addr_, num, &hints, &res0);
 	if (err) {
 		ortp_warning ("Error in socket address: %s", gai_strerror(err));
 		return -1;
@@ -1045,7 +1096,7 @@ rtp_session_set_remote_addr_full (RtpSession * session, const char * rtp_addr, i
 	}
 	freeaddrinfo(res0);
 	if (err) {
-		ortp_warning("Could not set destination for RTP socket to %s:%i.",rtp_addr,rtp_port);
+		ortp_warning("Could not set destination for RTP socket to %s:%i.",rtp_addr_,rtp_port);
 		return -1;
 	}
 	
@@ -1053,7 +1104,7 @@ rtp_session_set_remote_addr_full (RtpSession * session, const char * rtp_addr, i
 	hints.ai_family = PF_UNSPEC;
 	hints.ai_socktype = SOCK_DGRAM;
 	snprintf(num, sizeof(num), "%d", rtcp_port);
-	err = getaddrinfo(rtcp_addr, num, &hints, &res0);
+	err = getaddrinfo(rtcp_addr_, num, &hints, &res0);
 	if (err) {
 		ortp_warning ("Error: %s", gai_strerror(err));
 		return err;
@@ -1070,7 +1121,7 @@ rtp_session_set_remote_addr_full (RtpSession * session, const char * rtp_addr, i
 	}
 	freeaddrinfo(res0);
 	if (err) {
-		ortp_warning("Could not set destination for RCTP socket to %s:%i.",rtcp_addr,rtcp_port);
+		ortp_warning("Could not set destination for RCTP socket to %s:%i.",rtcp_addr_,rtcp_port);
 		return -1;
 	}
 #else
@@ -1079,7 +1130,7 @@ rtp_session_set_remote_addr_full (RtpSession * session, const char * rtp_addr, i
 	sockaddr_x saddr;
 	memset(&saddr, 0, sizeof(saddr));
 
-	Graph g0(createDAG(rtp_addr, rtp_port));
+	Graph g0(createDAG(rtp_addr_, rtp_port));
 	g0.fill_sockaddr(&saddr);
 
 	session->rtp.rem_addr = saddr;
@@ -1089,7 +1140,7 @@ rtp_session_set_remote_addr_full (RtpSession * session, const char * rtp_addr, i
 
 	memset(&saddr, 0, sizeof(saddr));
 
-	Graph g1(createDAG(rtcp_addr, rtcp_port));
+	Graph g1(createDAG(rtcp_addr_, rtcp_port));
 	g1.fill_sockaddr(&saddr);
 
 	session->rtcp.rem_addr = saddr;
